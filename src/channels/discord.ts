@@ -1,3 +1,10 @@
+import { execFile } from 'child_process';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
+import os from 'os';
+import path from 'path';
+import { promisify } from 'util';
 import {
   Client,
   Events,
@@ -11,6 +18,47 @@ import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
+
+const execFileAsync = promisify(execFile);
+
+const WHISPER_BIN = process.env.WHISPER_BIN || 'whisper-cli';
+const WHISPER_MODEL =
+  process.env.WHISPER_MODEL || 'data/models/ggml-base.bin';
+
+async function downloadToTemp(url: string): Promise<string> {
+  const tmpFile = path.join(os.tmpdir(), `discord-audio-${Date.now()}.ogg`);
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(tmpFile);
+    const get = url.startsWith('https') ? https.get : http.get;
+    get(url, (res) => {
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve(tmpFile)));
+    }).on('error', reject);
+  });
+}
+
+async function transcribeAudio(audioUrl: string): Promise<string | null> {
+  let oggPath: string | null = null;
+  let wavPath: string | null = null;
+  try {
+    oggPath = await downloadToTemp(audioUrl);
+    wavPath = oggPath.replace('.ogg', '.wav');
+    await execFileAsync('ffmpeg', [
+      '-i', oggPath, '-ar', '16000', '-ac', '1', '-f', 'wav', wavPath, '-y',
+    ]);
+    const { stdout } = await execFileAsync(WHISPER_BIN, [
+      '-m', WHISPER_MODEL, '-f', wavPath, '--no-timestamps', '-nt',
+    ]);
+    const transcript = stdout.trim();
+    return transcript || null;
+  } catch (err) {
+    logger.warn({ err }, 'whisper.cpp transcription failed');
+    return null;
+  } finally {
+    if (oggPath) fs.unlink(oggPath, () => {});
+    if (wavPath) fs.unlink(wavPath, () => {});
+  }
+}
 import {
   Channel,
   OnChatMetadata,
@@ -102,21 +150,26 @@ export class DiscordChannel implements Channel {
         }
       }
 
-      // Handle attachments — store placeholders so the agent knows something was sent
+      // Handle attachments — transcribe audio, placeholder for others
       if (message.attachments.size > 0) {
-        const attachmentDescriptions = [...message.attachments.values()].map(
-          (att) => {
+        const attachmentDescriptions = await Promise.all(
+          [...message.attachments.values()].map(async (att) => {
             const contentType = att.contentType || '';
-            if (contentType.startsWith('image/')) {
+            if (contentType.startsWith('audio/') || att.name?.endsWith('.ogg') || att.name?.endsWith('.mp3') || att.name?.endsWith('.m4a')) {
+              const transcript = await transcribeAudio(att.url);
+              if (transcript) {
+                logger.info({ att: att.name }, 'Transcribed Discord voice message');
+                return `[Voice: ${transcript}]`;
+              }
+              return `[Voice: (transcription failed)]`;
+            } else if (contentType.startsWith('image/')) {
               return `[Image: ${att.name || 'image'}]`;
             } else if (contentType.startsWith('video/')) {
               return `[Video: ${att.name || 'video'}]`;
-            } else if (contentType.startsWith('audio/')) {
-              return `[Audio: ${att.name || 'audio'}]`;
             } else {
               return `[File: ${att.name || 'file'}]`;
             }
-          },
+          }),
         );
         if (content) {
           content = `${content}\n${attachmentDescriptions.join('\n')}`;
