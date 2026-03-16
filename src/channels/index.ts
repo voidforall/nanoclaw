@@ -9,6 +9,6 @@ import './discord.js';
 // slack
 
 // telegram
-import './telegram.js';
+// import './telegram.js'; // not installed
 
 // whatsapp
