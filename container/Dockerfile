@@ -3,7 +3,7 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium and PDF tools
+# Install system dependencies for Chromium, PDF tools, and Python
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -25,7 +25,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     poppler-utils \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Playwright Python (use system Chromium via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH)
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pip3 install playwright --break-system-packages
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium

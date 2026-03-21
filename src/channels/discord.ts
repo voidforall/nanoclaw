@@ -22,8 +22,7 @@ import { registerChannel, ChannelOpts } from './registry.js';
 const execFileAsync = promisify(execFile);
 
 const WHISPER_BIN = process.env.WHISPER_BIN || 'whisper-cli';
-const WHISPER_MODEL =
-  process.env.WHISPER_MODEL || 'data/models/ggml-base.bin';
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'data/models/ggml-base.bin';
 
 async function downloadToTemp(url: string): Promise<string> {
   const tmpFile = path.join(os.tmpdir(), `discord-audio-${Date.now()}.ogg`);
@@ -44,10 +43,24 @@ async function transcribeAudio(audioUrl: string): Promise<string | null> {
     oggPath = await downloadToTemp(audioUrl);
     wavPath = oggPath.replace('.ogg', '.wav');
     await execFileAsync('ffmpeg', [
-      '-i', oggPath, '-ar', '16000', '-ac', '1', '-f', 'wav', wavPath, '-y',
+      '-i',
+      oggPath,
+      '-ar',
+      '16000',
+      '-ac',
+      '1',
+      '-f',
+      'wav',
+      wavPath,
+      '-y',
     ]);
     const { stdout } = await execFileAsync(WHISPER_BIN, [
-      '-m', WHISPER_MODEL, '-f', wavPath, '--no-timestamps', '-nt',
+      '-m',
+      WHISPER_MODEL,
+      '-f',
+      wavPath,
+      '--no-timestamps',
+      '-nt',
     ]);
     const transcript = stdout.trim();
     return transcript || null;
@@ -155,10 +168,18 @@ export class DiscordChannel implements Channel {
         const attachmentDescriptions = await Promise.all(
           [...message.attachments.values()].map(async (att) => {
             const contentType = att.contentType || '';
-            if (contentType.startsWith('audio/') || att.name?.endsWith('.ogg') || att.name?.endsWith('.mp3') || att.name?.endsWith('.m4a')) {
+            if (
+              contentType.startsWith('audio/') ||
+              att.name?.endsWith('.ogg') ||
+              att.name?.endsWith('.mp3') ||
+              att.name?.endsWith('.m4a')
+            ) {
               const transcript = await transcribeAudio(att.url);
               if (transcript) {
-                logger.info({ att: att.name }, 'Transcribed Discord voice message');
+                logger.info(
+                  { att: att.name },
+                  'Transcribed Discord voice message',
+                );
                 return `[Voice: ${transcript}]`;
               }
               return `[Voice: (transcription failed)]`;
@@ -298,6 +319,29 @@ export class DiscordChannel implements Channel {
       this.client.destroy();
       this.client = null;
       logger.info('Discord bot stopped');
+    }
+  }
+
+  async sendFile(jid: string, filePath: string, caption?: string): Promise<void> {
+    if (!this.client) {
+      logger.warn('Discord client not initialized');
+      return;
+    }
+    try {
+      const channelId = jid.replace(/^dc:/, '');
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !('send' in channel)) {
+        logger.warn({ jid }, 'Discord channel not found or not text-based');
+        return;
+      }
+      const textChannel = channel as TextChannel;
+      await textChannel.send({
+        content: caption || undefined,
+        files: [filePath],
+      });
+      logger.info({ jid, filePath }, 'Discord file sent');
+    } catch (err) {
+      logger.error({ jid, filePath, err }, 'Failed to send Discord file');
     }
   }
 

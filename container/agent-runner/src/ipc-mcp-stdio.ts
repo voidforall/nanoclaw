@@ -63,6 +63,29 @@ server.tool(
 );
 
 server.tool(
+  'send_file',
+  "Send a file (image, PDF, etc.) to the user or group. Use this after rendering a diagram or generating a file that the user should receive. The filePath must be an absolute path inside the container.",
+  {
+    filePath: z.string().describe('Absolute path to the file inside the container (e.g. "/workspace/group/diagrams/diagram.png")'),
+    caption: z.string().optional().describe('Optional caption text to accompany the file'),
+  },
+  async (args) => {
+    const data: Record<string, string | undefined> = {
+      type: 'file',
+      chatJid,
+      filePath: args.filePath,
+      caption: args.caption || undefined,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'File queued for delivery.' }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 
