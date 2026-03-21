@@ -92,7 +92,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'file' && data.chatJid && data.filePath) {
+              } else if (
+                data.type === 'file' &&
+                data.chatJid &&
+                data.filePath
+              ) {
                 // Authorization: same rules as messages
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
@@ -103,16 +107,28 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     // Map container path /workspace/group/... to host path groups/{folder}/...
                     const containerPath = data.filePath as string;
                     const groupHostDir = path.join(GROUPS_DIR, sourceGroup);
-                    const hostPath = containerPath.startsWith('/workspace/group/')
-                      ? path.join(groupHostDir, containerPath.slice('/workspace/group/'.length))
+                    const hostPath = containerPath.startsWith(
+                      '/workspace/group/',
+                    )
+                      ? path.join(
+                          groupHostDir,
+                          containerPath.slice('/workspace/group/'.length),
+                        )
                       : containerPath;
-                    await deps.sendFile(data.chatJid, hostPath, data.caption || undefined);
+                    await deps.sendFile(
+                      data.chatJid,
+                      hostPath,
+                      data.caption || undefined,
+                    );
                     logger.info(
                       { chatJid: data.chatJid, sourceGroup, hostPath },
                       'IPC file sent',
                     );
                   } else {
-                    logger.warn({ chatJid: data.chatJid }, 'send_file not supported by channel');
+                    logger.warn(
+                      { chatJid: data.chatJid },
+                      'send_file not supported by channel',
+                    );
                   }
                 } else {
                   logger.warn(

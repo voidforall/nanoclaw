@@ -693,7 +693,10 @@ async function main(): Promise<void> {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
       if (!channel.sendFile) {
-        logger.warn({ jid, channel: channel.name }, 'Channel does not support sendFile');
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support sendFile',
+        );
         return;
       }
       return channel.sendFile(jid, filePath, caption);
